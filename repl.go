@@ -2,8 +2,8 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 )
@@ -37,6 +37,11 @@ func startREPL(cfg *config) {
 			name:        "map",
 			description: "Shows map locations in the pokemon world",
 			callback:    commandMap,
+		},
+		"mapb": {
+			name:        "mapb",
+			description: "Shows previous list of map locations in the pokemon world",
+			callback:    commandMapb,
 		},
 	}
 
@@ -74,9 +79,27 @@ func commandHelp(cfg *config) error {
 }
 
 func commandMap(cfg *config) error {
-	resp, err := cfg.pokeapiClient.ListLocationAreas()
+	resp, err := cfg.pokeapiClient.ListLocationAreas(cfg.nextLocationAreaURL)
 	if err != nil {
-		log.Fatal(err)
+		return err
+	}
+	fmt.Println("Locations areas:")
+	for _, area := range resp.Results {
+		fmt.Printf("%s\n", area.Name)
+	}
+	cfg.nextLocationAreaURL = resp.Next
+	cfg.prevLocationAreaURL = resp.Previous
+	return nil
+}
+
+// map back
+func commandMapb(cfg *config) error {
+	if cfg.prevLocationAreaURL == nil {
+		return errors.New("no previous page")
+	}
+	resp, err := cfg.pokeapiClient.ListLocationAreas(cfg.prevLocationAreaURL)
+	if err != nil {
+		return err
 	}
 	fmt.Println("Locations areas:")
 	for _, area := range resp.Results {
