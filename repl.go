@@ -43,6 +43,11 @@ func startREPL(cfg *config) {
 			description: "Shows previous list of map locations in the pokemon world",
 			callback:    commandMapb,
 		},
+		"explore": {
+			name:        "explore",
+			description: "displays information for a particular map",
+			callback:    commandExplore,
+		},
 	}
 
 	for {
@@ -107,5 +112,9 @@ func commandMapb(cfg *config) error {
 	}
 	cfg.nextLocationAreaURL = resp.Next
 	cfg.prevLocationAreaURL = resp.Previous
+	return nil
+}
+
+func commandExplore(cfg *config) error {
 	return nil
 }
