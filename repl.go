@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 )
@@ -19,7 +20,7 @@ func startREPL(cfg *config) {
 	type cliCommand struct {
 		name        string
 		description string
-		callback    func(*config) error
+		callback    func(*config, ...string) error
 	}
 
 	m := map[string]cliCommand{
@@ -44,9 +45,24 @@ func startREPL(cfg *config) {
 			callback:    commandMapb,
 		},
 		"explore": {
-			name:        "explore",
-			description: "displays information for a particular map",
+			name:        "explore {location_area}",
+			description: "displays pokemon for a particular map",
 			callback:    commandExplore,
+		},
+		"catch": {
+			name:        "catch {pokemon}",
+			description: "ability to catch pokemon in an area",
+			callback:    commandCatch,
+		},
+		"inspect": {
+			name:        "inspect {pokemon}",
+			description: "ability to see info on a captured pokemon",
+			callback:    commandInspect,
+		},
+		"pokedex": {
+			name:        "pokedex",
+			description: "see a list captured pokemon",
+			callback:    commandPokedex,
 		},
 	}
 
@@ -59,22 +75,31 @@ func startREPL(cfg *config) {
 		}
 		clean := cleanInput(text)
 		input := clean[0]
+
+		args := []string{}
+		if len(clean) > 1 {
+			args = clean[1:]
+		}
+
 		cmd, exists := m[input]
 		if exists {
-			cmd.callback(cfg)
+			err := cmd.callback(cfg, args...)
+			if err != nil {
+				fmt.Println("Error:", err)
+			}
 		} else {
 			fmt.Println("Unkown Command")
 		}
 	}
 }
 
-func commandExit(cfg *config) error {
+func commandExit(cfg *config, args ...string) error {
 	fmt.Println("Closing the Pokedex... Goodbye!")
 	os.Exit(0)
 	return nil
 }
 
-func commandHelp(cfg *config) error {
+func commandHelp(cfg *config, args ...string) error {
 	fmt.Println("Welcome to the Pokedex!")
 	fmt.Println("Usage:")
 	fmt.Println()
@@ -83,7 +108,7 @@ func commandHelp(cfg *config) error {
 	return nil
 }
 
-func commandMap(cfg *config) error {
+func commandMap(cfg *config, args ...string) error {
 	resp, err := cfg.pokeapiClient.ListLocationAreas(cfg.nextLocationAreaURL)
 	if err != nil {
 		return err
@@ -98,7 +123,7 @@ func commandMap(cfg *config) error {
 }
 
 // map back
-func commandMapb(cfg *config) error {
+func commandMapb(cfg *config, args ...string) error {
 	if cfg.prevLocationAreaURL == nil {
 		return errors.New("no previous page")
 	}
@@ -115,6 +140,76 @@ func commandMapb(cfg *config) error {
 	return nil
 }
 
-func commandExplore(cfg *config) error {
+func commandExplore(cfg *config, args ...string) error {
+	if len(args) != 1 {
+		return errors.New("No location given")
+	}
+	locationAreaName := args[0]
+
+	locationArea, err := cfg.pokeapiClient.GetLocationArea(locationAreaName)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Pokemon in %s:\n", locationArea.Name)
+	for _, pokemon := range locationArea.PokemonEncounters {
+		fmt.Printf(" - %s\n", pokemon.Pokemon.Name)
+	}
+	return nil
+}
+
+func commandCatch(cfg *config, args ...string) error {
+	if len(args) != 1 {
+		return errors.New("No pokemon provided")
+	}
+	pokemonName := args[0]
+
+	pokemon, err := cfg.pokeapiClient.GetPokemon(pokemonName)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Throwing a Pokeball at %s...\n", pokemonName)
+	const threshold = 50
+	randNum := rand.Intn(pokemon.BaseExperience)
+	if randNum > threshold {
+		return fmt.Errorf("Failed to catch %s\n", pokemonName)
+	}
+
+	cfg.caughtPokemon[pokemonName] = pokemon
+	fmt.Printf("%s was caught!\n", pokemonName)
+	return nil
+}
+
+func commandInspect(cfg *config, args ...string) error {
+	if len(args) != 1 {
+		return errors.New("No pokemon provided")
+	}
+	pokemonName := args[0]
+
+	pokemon, ok := cfg.caughtPokemon[pokemonName]
+	if !ok {
+		return errors.New("You have not caught this pokemon")
+	}
+
+	fmt.Printf("Name: %s...\n", pokemon.Name)
+	fmt.Printf("Height: %v\n", pokemon.Height)
+	fmt.Printf("Weight: %v\n", pokemon.Weight)
+	fmt.Println("Stats:")
+	for _, stat := range pokemon.Stats {
+		fmt.Printf("  - %s: %v\n", stat.Stat.Name, stat.BaseStat)
+	}
+	fmt.Println("Types:")
+	for _, typ := range pokemon.Types {
+		fmt.Printf("  - %s\n", typ.Type.Name)
+	}
+	return nil
+}
+
+func commandPokedex(cfg *config, args ...string) error {
+	fmt.Println("Pokemon in Pokedex:")
+	for _, pokemon := range cfg.caughtPokemon {
+		fmt.Printf("  - %s\n", pokemon.Name)
+	}
+
 	return nil
 }
